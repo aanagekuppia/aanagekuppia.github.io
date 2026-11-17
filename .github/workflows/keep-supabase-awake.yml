@@ -1,0 +1,21 @@
+# Free Supabase projects pause after ~7 days with no activity.
+# This pings the database every 3 days so the site never goes to sleep (e.g. during holidays).
+# It reads the PUBLIC url + key from js/config.js, so there is nothing secret to set up.
+name: keep-supabase-awake
+on:
+  schedule:
+    - cron: "17 3 */3 * *"
+  workflow_dispatch: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ping Supabase
+        run: |
+          URL=$(grep -o 'SUPABASE_URL: *"[^"]*"' js/config.js | cut -d'"' -f2)
+          KEY=$(grep -o 'SUPABASE_KEY: *"[^"]*"' js/config.js | cut -d'"' -f2)
+          case "$URL" in https://*) ;; *) echo "config.js not filled in yet - skipping"; exit 0;; esac
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL/rest/v1/subjects?select=id&limit=1" -H "apikey: $KEY")
+          echo "Supabase answered HTTP $CODE"
+          test "$CODE" = "200"
