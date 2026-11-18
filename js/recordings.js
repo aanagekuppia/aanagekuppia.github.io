@@ -106,7 +106,7 @@ function openPlayer(vid) {
 
   if (vid.noteId) {
     noteBtn.style.display = 'flex';
-    noteBtn.onclick = () => { closePlayer(); window.location.href = `notes.html#${vid.noteId}`; };
+    noteBtn.onclick = () => { closePlayer(); window.location.href = `notes#${vid.noteId}`; };
   } else {
     noteBtn.style.display = 'none';
   }
@@ -136,7 +136,7 @@ function buildVideoList(videos) {
     const safeVid = JSON.stringify({label:vid.label,date:vid.date,url:vid.url,noteId:vid.noteId||''})
                         .replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     const noteTag = vid.noteId
-      ? `<a class="vid-note-tag" href="notes.html#${vid.noteId}" title="View notes" onclick="event.stopPropagation()"><i class="fa-solid fa-book-open"></i></a>`
+      ? `<a class="vid-note-tag" href="notes#${vid.noteId}" title="View notes" onclick="event.stopPropagation()"><i class="fa-solid fa-book-open"></i></a>`
       : '';
     return `<div class="vid-item" onclick="openPlayer(${safeVid.replace(/"/g,"'")})" style="animation-delay:${0.05*i}s">
       <div class="vid-num">${String(i+1).padStart(2,'0')}</div>

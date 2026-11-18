@@ -5,6 +5,8 @@ Plain HTML / CSS / JS. No PHP, no build step. Data lives in Supabase.
 ## Folders
 ```
 index.html, notes.html, recordings.html, assignments.html, memories.html, music.html, loader.html, 404.html
+   (visitors never see ".html": the site shows /notes, /recordings ... and rewrites the address bar if someone opens a .html link)
+admin/               the admin panel (https://aanagekuppia.github.io/admin/)
 css/                 page styles (unchanged look)
 js/                  page scripts
   config.js          <- the ONLY file with settings (Supabase URL + key, download proxy)

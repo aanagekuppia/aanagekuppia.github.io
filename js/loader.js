@@ -5,7 +5,12 @@
    ============================================================ */
 (function () {
   "use strict";
-  var DEST = "index.html";
+  var DEST = "./";
+  try {                                    // return to the page the visitor first asked for
+    var want = sessionStorage.getItem("aana_next");
+    if (want && /^(notes|recordings|assignments|memories|music)(#[\w-]*)?$/.test(want)) DEST = want;
+    sessionStorage.removeItem("aana_next");
+  } catch (e) {}
   var MAX_MS = 34000;          // never wait longer than this
   var SKIP_AFTER = 2500;       // show the Skip button after this long
   var EST_MS = 21000;          // rough length of a full rotation, for the progress bar

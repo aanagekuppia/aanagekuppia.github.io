@@ -4,3 +4,17 @@ main{flex:1;max-width:960px;width:100%;margin:0 auto;padding:clamp(1rem,3vw,2rem
 .aquinas-wrap aquinas-logo:hover{transform:scale(1.04)}
 .about-dsvb{display:block;margin:0 0 .35rem}
 @media (max-width:520px){.about-dsvb{margin-bottom:.15rem}}
+
+/* ===== home: Aquinas (left) | text | DSVB lion (right), both logos the same size ===== */
+.about-row{--logo:clamp(108px,14.5vw,170px);grid-template-columns:var(--logo) minmax(0,1fr) var(--logo);gap:clamp(.9rem,2.6vw,1.8rem);align-items:center}
+.aquinas-wrap,.dsvb-wrap{width:var(--logo);position:relative;justify-self:center}
+.aquinas-wrap aquinas-logo,.dsvb-wrap dsvb-logo{display:block;width:100%}
+.dsvb-wrap:before{content:"";position:absolute;inset:-14px;background:radial-gradient(ellipse at center,rgba(255,170,60,.38) 0,rgba(59,130,246,.22) 45%,transparent 70%);filter:blur(8px);pointer-events:none;animation:aquinaGlow 4s ease-in-out infinite;z-index:0}
+.dsvb-wrap dsvb-logo{position:relative;z-index:1;transition:transform .3s}
+.dsvb-wrap dsvb-logo:hover{transform:scale(1.04)}
+.about-dsvb{display:none}
+@media (max-width:680px){
+  .about-row{--logo:clamp(92px,30vw,140px);grid-template-columns:1fr 1fr;grid-template-areas:"aq ds" "tx tx";gap:.9rem .5rem}
+  .aquinas-wrap{grid-area:aq}.dsvb-wrap{grid-area:ds}.about-text{grid-area:tx}
+  .about-text p{text-align:center}
+}

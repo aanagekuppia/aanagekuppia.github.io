@@ -8,3 +8,12 @@
 .skip-btn:hover{background:rgba(255,255,255,.16)}
 .skip-btn:active{transform:scale(.94)}
 .skip-btn:focus-visible{outline:2px solid #ffd84d;outline-offset:2px}
+
+/* lion on the left, text + progress on the right, the whole row centred */
+.id-row{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:clamp(.7rem,2.4vw,1.2rem);margin-top:clamp(.1rem,1vw,.6rem);max-width:100%;padding:0 .8rem}
+.id-row .dsvb-logo-wrap{width:clamp(74px,17vw,104px);margin:0;flex:0 0 auto}
+.id-row dsvb-logo-loop{display:block;width:100%}
+.id-text{display:flex;flex-direction:column;align-items:flex-start;gap:.55rem;min-width:0}
+.id-text .tagline-wrap{align-items:flex-start;gap:.22rem}
+.id-text .progress-wrap{width:100%;min-width:120px}
+@media (max-width:420px){.id-row{gap:.6rem}.id-text .tl-sub{font-size:.55rem}}

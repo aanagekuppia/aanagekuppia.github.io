@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kuppia — Loading</title>
 <meta name="robots" content="noindex, nofollow">
-<noscript><meta http-equiv="refresh" content="0;url=index.html"></noscript>
+<noscript><meta http-equiv="refresh" content="0;url=./"></noscript>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Lora:ital,wght@1,400&family=Noto+Sans+Sinhala:wght@700&family=Cormorant+Garamond:wght@600;700&display=swap">
@@ -18,14 +18,18 @@
   <div class="gif-wrap">
     <aquinas-logo-loop id="aqLogo" size="100%" fps="30" reverse-speed="2" cooldown="0.2" title="Aquinas"></aquinas-logo-loop>
   </div>
-  <div class="dsvb-logo-wrap">
-    <dsvb-logo-loop id="dsLogo" size="clamp(118px,26vw,180px)" fps="30" disappear-at="9" reverse-speed="2" cooldown="0.2" title="DSVB"></dsvb-logo-loop>
+  <div class="id-row">
+    <div class="dsvb-logo-wrap">
+      <dsvb-logo-loop id="dsLogo" size="100%" fps="30" disappear-at="9" reverse-speed="2" cooldown="0.2" title="DSVB"></dsvb-logo-loop>
+    </div>
+    <div class="id-text">
+      <div class="tagline-wrap" id="taglineWrap">
+        <div class="tl-main"><span class="tl-sinhala">ආනාගේ</span> Kuppia</div>
+        <span class="tl-sub">Himan Thathuwa Kethala Hiruwa</span>
+      </div>
+      <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="progressBar"></div></div>
+    </div>
   </div>
-  <div class="tagline-wrap" id="taglineWrap">
-    <div class="tl-main"><span class="tl-sinhala">ආනාගේ</span> Kuppia</div>
-    <span class="tl-sub">Himan Thathuwa Kethala Hiruwa</span>
-  </div>
-  <div class="progress-wrap" id="progressWrap"><div class="progress-bar" id="progressBar"></div></div>
   <button id="skipBtn" class="skip-btn" type="button" aria-label="Skip intro">Skip &rsaquo;</button>
 </div>
 <div id="preload-zone" aria-hidden="true" style="position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;visibility:hidden"></div>

@@ -7,7 +7,7 @@
 (function () {
   "use strict";
   var C = window.DSVB_CONFIG || {};
-  var EMAIL = function (u) { return String(u || "").trim().toLowerCase() + "@" + (C.ADMIN_EMAIL_DOMAIN || "aanagekuppia.github.io"); };
+  var EMAIL = function (u) { u = String(u || "").trim().toLowerCase(); return u.indexOf("@") >= 0 ? u : u + "@" + (C.ADMIN_EMAIL_DOMAIN || "aanagekuppia.github.io"); };
   var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
   /* ---------- tiny DOM helper (text is always inserted as text, never as HTML) ---------- */
@@ -111,18 +111,64 @@
 
   /* ---------- reusable bits ---------- */
   var sortRows = function (a) { return a.slice().sort(function (x, y) { return (x.sort_order - y.sort_order) || (x.id - y.id); }); };
-  async function move(table, rows, idx, dir) {          // rows are already in display order
-    var j = idx + dir; if (j < 0 || j >= rows.length) return false;
-    var a = rows.slice(), t = a[idx]; a[idx] = a[j]; a[j] = t;
-    await Promise.all(a.map(function (r, i) { return r.sort_order === i ? null : db(sb.from(table).update({ sort_order: i }).eq("id", r.id)); }));
-    return true;
+  // Saves a new order: ids = row ids in their new order; only rows whose position changed are written.
+  async function applyOrder(table, rows, ids) {
+    var byId = {}; rows.forEach(function (r) { byId[r.id] = r; });
+    var jobs = [];
+    ids.forEach(function (id, p) { var r = byId[id]; if (r && r.sort_order !== p) jobs.push(db(sb.from(table).update({ sort_order: p }).eq("id", id))); });
+    await Promise.all(jobs);
+    return jobs.length;
   }
   function nextSort(rows) { return rows.reduce(function (m, r) { return Math.max(m, r.sort_order || 0); }, -1) + 1; }
   function btn(label, cls, fn, title) { return h("button", { class: "btn " + (cls || ""), type: "button", onclick: fn, title: title || null }, label); }
-  function mover(table, rows, i, again) {
-    return [btn("↑", "ico sm", async function () { if (await move(table, rows, i, -1)) again(); }, "Move up"),
-            btn("↓", "ico sm", async function () { if (await move(table, rows, i, 1)) again(); }, "Move down")];
+  // A drag handle (only visible after you press the lock button). itemSel = which element is the draggable row.
+  function mover(table, rows, i, again, itemSel) {
+    var hd = h("span", { class: "drag-handle", title: "Drag to reorder", "data-rid": rows[i].id }, "\u283f");
+    hd._mv = { table: table, rows: rows, again: again, sel: itemSel || ".row" };
+    return hd;
   }
+  var UNLOCKED = false;
+  function setUnlocked(v) {
+    UNLOCKED = !!v; document.body.classList.toggle("drag-unlocked", UNLOCKED);
+    var b = $(".lock-btn"); if (!b) return;
+    b.classList.toggle("unlocked", UNLOCKED); clear(b);
+    b.appendChild(h("i", { class: "fa-solid " + (UNLOCKED ? "fa-lock-open" : "fa-lock") }));
+    b.appendChild(document.createTextNode(UNLOCKED ? " Reordering: drag the \u283f handles" : " Reorder"));
+  }
+  document.addEventListener("pointerdown", function (e) {
+    if (!UNLOCKED || (e.button != null && e.button > 0)) return;
+    var hd = e.target.closest && e.target.closest(".drag-handle"); if (!hd || !hd._mv) return;
+    var mv = hd._mv, item = hd.closest(mv.sel); if (!item) return;
+    e.preventDefault();
+    function handleOf(c) { return Array.prototype.filter.call(c.querySelectorAll(".drag-handle"), function (x) { return x._mv && x._mv.table === mv.table && x.closest(mv.sel) === c; })[0]; }
+    function sibs() { return Array.prototype.filter.call(item.parentElement.children, function (c) { return c.matches(mv.sel) && !!handleOf(c); }); }
+    var r = item.getBoundingClientRect(), offY = e.clientY - r.top, last = e.clientY, drop = null;
+    var ghost = item.cloneNode(true); ghost.className += " drag-ghost"; ghost.style.cssText += ";width:" + r.width + "px;left:" + r.left + "px;top:" + r.top + "px";
+    document.body.appendChild(ghost); item.classList.add("drag-dragging"); document.body.classList.add("dragging");
+    function mark() { sibs().forEach(function (c) { c.classList.remove("drag-over-top", "drag-over-bot"); }); if (drop) drop.el.classList.add(drop.before ? "drag-over-top" : "drag-over-bot"); }
+    function move(ev) {
+      last = ev.clientY; ghost.style.top = (ev.clientY - offY) + "px";
+      var list = sibs().filter(function (c) { return c !== item; });
+      drop = null;
+      for (var k = 0; k < list.length; k++) { var b = list[k].getBoundingClientRect(); if (ev.clientY < b.top + b.height / 2) { drop = { el: list[k], before: true }; break; } }
+      if (!drop && list.length) drop = { el: list[list.length - 1], before: false };
+      mark();
+    }
+    var scroller = setInterval(function () { if (last < 90) window.scrollBy(0, -14); else if (last > window.innerHeight - 90) window.scrollBy(0, 14); }, 16);
+    function cleanup() { clearInterval(scroller); document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); document.removeEventListener("pointercancel", cancel); ghost.remove(); item.classList.remove("drag-dragging"); document.body.classList.remove("dragging"); sibs().forEach(function (c) { c.classList.remove("drag-over-top", "drag-over-bot"); }); }
+    function cancel() { cleanup(); }
+    async function up() {
+      var d = drop; cleanup(); if (!d) return;
+      var ids = sibs().map(function (c) { return Number(handleOf(c).getAttribute("data-rid")); });
+      var me = Number(handleOf(item).getAttribute("data-rid")), tgt = Number(handleOf(d.el).getAttribute("data-rid"));
+      ids = ids.filter(function (x) { return x !== me; });
+      var at = ids.indexOf(tgt) + (d.before ? 0 : 1); ids.splice(at, 0, me);
+      var n = 0; try { n = await applyOrder(mv.table, mv.rows, ids); } catch (err) {}
+      if (n) toast("Order saved", "ok");
+      mv.again();
+    }
+    document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", cancel);
+  });
   function kind(url) {
     var c = window.DSVBPlayer ? DSVBPlayer.classify(url).type : "external";
     return { youtube: ["yt", "YouTube"], drive: ["drive", "Drive"], vimeo: ["vimeo", "Vimeo"], direct: ["", "Video file"] }[c] || ["warn", "Link"];
@@ -142,31 +188,50 @@
   var SUBJECTS = [], SEL = { year: 1, sem: 1, id: null };
   try { var saved = JSON.parse(localStorage.getItem("adm:sel")); if (saved) SEL = saved; } catch (e) {}
   function subjName(id) { var s = SUBJECTS.filter(function (x) { return x.id === id; })[0]; return s ? s.name : id; }
-  function picker(host, onPick) {
+  var OPEN = { y: {}, s: {} };
+  function acadYear(y) { var a = 2025 + y; return a + "-" + String(a + 1).slice(-2); }
+  function ic(c) { return h("i", { class: "fa-solid " + c }); }
+  function treeView(onPick) {
+    var col = h("div", { class: "tree-col" });
+    var cur0 = SUBJECTS.filter(function (s) { return s.id === SEL.id; })[0];
+    if (cur0) { OPEN.y[cur0.year] = true; OPEN.s[cur0.year + "-" + cur0.sem] = true; if (window.matchMedia && matchMedia("(max-width:760px)").matches) col.classList.add("collapsed"); }
+    else if (!Object.keys(OPEN.y).length) { OPEN.y[1] = true; OPEN.s["1-1"] = true; }
     function draw() {
-      clear(host);
-      var years = [1, 2, 3, 4];
-      host.appendChild(h("div", { class: "chips" }, years.map(function (y) {
-        return h("button", { class: "chip" + (SEL.year === y ? " on" : ""), type: "button", onclick: function () { SEL.year = y; SEL.id = null; draw(); onPick(null); } }, "Year " + y);
-      }), h("span", { class: "muted", style: "align-self:center;margin:0 .3rem" }, "·"), [1, 2].map(function (s) {
-        return h("button", { class: "chip" + (SEL.sem === s ? " on" : ""), type: "button", onclick: function () { SEL.sem = s; SEL.id = null; draw(); onPick(null); } }, "Sem " + s);
-      })));
-      var subs = SUBJECTS.filter(function (s) { return s.year === SEL.year && s.sem === SEL.sem; }).sort(function (a, b) { return a.sort - b.sort; });
-      host.appendChild(h("div", { class: "chips" }, subs.map(function (s) {
-        return h("button", { class: "chip" + (SEL.id === s.id ? " on" : ""), type: "button", onclick: function () {
-          SEL.id = s.id; try { localStorage.setItem("adm:sel", JSON.stringify(SEL)); } catch (e) {} draw(); onPick(s); } }, s.name);
-      })));
-      if (!SEL.id) host.appendChild(h("div", { class: "subjline" }, "Pick a subject to start."));
+      clear(col);
+      var cur = SUBJECTS.filter(function (s) { return s.id === SEL.id; })[0];
+      col.appendChild(h("div", { class: "tree-hd", onclick: function () { col.classList.toggle("collapsed"); } }, ic("fa-sitemap"), "Select subject", cur ? h("span", { class: "tree-cur" }, cur.name) : null, ic("fa-chevron-down tree-tog")));
+      var sc = h("div", { class: "tree-scroll" });
+      [1, 2, 3, 4].forEach(function (y) {
+        var yo = !!OPEN.y[y];
+        sc.appendChild(h("div", { class: "t-year" + (yo ? " open" : ""), onclick: function () { OPEN.y[y] = !yo; draw(); } }, ic("fa-graduation-cap"), "Year " + pad(y), h("small", {}, acadYear(y)), ic("fa-chevron-right t-chev")));
+        var yb = h("div", { class: "t-body" + (yo ? " open" : "") });
+        [1, 2].forEach(function (m) {
+          var key = y + "-" + m, so = !!OPEN.s[key];
+          yb.appendChild(h("div", { class: "t-sem" + (so ? " open" : ""), onclick: function () { OPEN.s[key] = !so; draw(); } }, ic("fa-layer-group"), "Semester " + pad(m), ic("fa-chevron-right t-chev")));
+          var sb2 = h("div", { class: "t-body" + (so ? " open" : "") });
+          SUBJECTS.filter(function (s) { return s.year === y && s.sem === m; }).sort(function (a, b) { return a.sort - b.sort; }).forEach(function (s) {
+            sb2.appendChild(h("div", { class: "t-subj" + (SEL.id === s.id ? " active" : ""), onclick: function () {
+              SEL.id = s.id; SEL.year = s.year; SEL.sem = s.sem; try { localStorage.setItem("adm:sel", JSON.stringify(SEL)); } catch (e) {}
+              col.classList.add("collapsed"); draw(); onPick(s); } }, ic("fa-file-lines"), s.name));
+          });
+          yb.appendChild(sb2);
+        });
+        sc.appendChild(yb);
+      });
+      col.appendChild(sc);
     }
     draw();
-    var cur = SUBJECTS.filter(function (s) { return s.id === SEL.id; })[0];
-    if (cur) onPick(cur);
+    return col;
   }
   function subjectTab(host, title, render) {            // shared layout for tabs that work per subject
-    var pick = h("div"), body = h("div");
-    host.appendChild(h("div", { class: "card" }, h("h2", {}, title), pick));
-    host.appendChild(body);
-    picker(pick, function (s) { clear(body); if (s) render(body, s); });
+    var content = h("div", { class: "content-col" });
+    function show(s) {
+      clear(content);
+      if (!s) content.appendChild(h("div", { class: "content-placeholder" }, ic("fa-hand-pointer"), "Select a subject from the tree to manage its files."));
+      else render(content, s);
+    }
+    host.appendChild(h("div", { class: "panel" }, treeView(show), content));
+    show(SUBJECTS.filter(function (s) { return s.id === SEL.id; })[0]);
   }
 
   /* ============================================================
@@ -304,7 +369,7 @@
             h("div", { class: "main" }, h("div", { class: "t" }, e.name), h("div", { class: "s" }, h("span", { class: "badge" }, e.category === "brief" ? "Brief" : "Aana's"), e.entry_category || "", e.deadline ? " · Deadline: " + e.deadline : "")),
             h("div", { class: "acts" }, btn("Edit", "sm", function () { editEntry(e, rows); }),
               btn("✕", "bad sm ico", async function () { if (confirm("Delete “" + e.name + "” and its files?")) { await db(sb.from("assignments").delete().eq("id", e.id)); toast("Deleted", "ok"); draw(); } }),
-              mover("assignments", rows, i, draw))));
+              mover("assignments", rows, i, draw, ".mrow"))));
           var list = h("div", { class: "list" });
           files.forEach(function (f, j) {
             list.appendChild(h("div", { class: "row" },
@@ -541,7 +606,7 @@
           h("div", {}, h("h2", { style: "margin:0" }, h("span", { style: "display:inline-block;width:.8rem;height:.8rem;border-radius:50%;margin-right:.5rem;background:" + (/^#[0-9a-f]{3,8}$/i.test(c.icon_color) ? c.icon_color : "#888") }), c.name), h("div", { class: "muted" }, "icon: " + c.icon)),
           h("div", { class: "acts", style: "display:flex;gap:.3rem;flex-wrap:wrap" }, btn("+ Notification", "pri sm", function () { editNote(c, null, items); }), btn("Edit", "sm", function () { editCat(c, cats); }),
             btn("✕", "bad sm ico", async function () { if (confirm("Delete category “" + c.name + "” and all notifications in it?")) { await db(sb.from("notification_categories").delete().eq("id", c.id)); draw(); } }),
-            mover("notification_categories", cats, ci, draw))));
+            mover("notification_categories", cats, ci, draw, ".card"))));
         var list = h("div", { class: "list" });
         if (!items.length) list.appendChild(h("div", { class: "empty" }, "Empty category (it is hidden on the site until it has a visible notification)."));
         items.forEach(function (n, i) {
@@ -793,41 +858,83 @@
   /* ============================================================
      LOGIN + SHELL
      ============================================================ */
-  var TABS = [["recordings", "🎬 Recordings", tabRecordings], ["notes", "📄 Notes", tabNotes], ["assignments", "📝 Assignments", tabAssignments], ["songs", "🎵 Songs & lyrics", tabSongs],
-    ["notifications", "🔔 Notifications", tabNotifications], ["carousel", "🖼 Slideshow", tabCarousel], ["memories", "📸 Memories", tabMemories], ["settings", "⚙ Settings", tabSettings], ["backup", "💾 Backup", tabBackup]];
+  var TABS = [["notes", "fa-book-open", "Notes", tabNotes], ["recordings", "fa-clapperboard", "Recordings", tabRecordings], ["assignments", "fa-file-pen", "Assignments", tabAssignments],
+    ["songs", "fa-music", "Songs", tabSongs], ["notifications", "fa-bell", "Notices", tabNotifications], ["carousel", "fa-images", "Slideshow", tabCarousel],
+    ["memories", "fa-camera-retro", "Memories", tabMemories], ["settings", "fa-gear", "Settings", tabSettings], ["backup", "fa-floppy-disk", "Backup", tabBackup]];
+  var NO_REORDER = { settings: 1, backup: 1 };
   var app = document.getElementById("app");
 
   function showLogin(msg) {
-    clear(app);
-    var user = h("input", { type: "text", autocomplete: "username", autocapitalize: "none", placeholder: "Username", required: true }),
-        pass = h("input", { type: "password", autocomplete: "current-password", placeholder: "Password", required: true }),
-        err = h("div", { class: "err" }, msg || ""), go = h("button", { class: "btn pri", type: "submit" }, "Log in");
-    var f = h("form", {}, h("h1", {}, "ආනාගේ Kuppia"), h("p", { class: "sub" }, "Admin panel"), user, pass, err, go);
+    clear(app); document.body.classList.remove("admin-page");
+    var user = h("input", { type: "text", autocomplete: "username", autocapitalize: "none", spellcheck: "false", placeholder: "Username", "aria-label": "Username", required: true }),
+        pass = h("input", { type: "password", autocomplete: "current-password", placeholder: "Password", "aria-label": "Password", required: true }),
+        err = h("div", { class: "lg-err", role: "alert" }, msg || ""), go = h("button", { class: "lg-btn", type: "submit" }, "Log in");
+    var eye = h("button", { class: "lg-eye", type: "button", tabindex: "-1", "aria-label": "Show password", onclick: function () {
+      var show = pass.type === "password"; pass.type = show ? "text" : "password"; clear(eye); eye.appendChild(ic(show ? "fa-eye-slash" : "fa-eye")); } }, ic("fa-eye"));
+    var aq = document.createElement("aquinas-logo"); aq.setAttribute("size", "100%"); aq.setAttribute("once", "adm-aq"); aq.setAttribute("fps", "30");
+    var ds = document.createElement("dsvb-logo"); ds.setAttribute("size", "100%"); ds.setAttribute("once", "adm-ds"); ds.setAttribute("fps", "30");
+    var f = h("form", { class: "lg-body", novalidate: true },
+      h("div", { class: "lg-title" }, h("span", {}, "ආනාගේ"), " Kuppia"), h("div", { class: "lg-sub" }, "Admin panel"),
+      h("div", { class: "lg-field" }, h("i", { class: "fa-solid fa-user lead" }), user),
+      h("div", { class: "lg-field" }, h("i", { class: "fa-solid fa-lock lead" }), pass, eye),
+      err, go, h("div", { class: "lg-foot" }, h("a", { href: "../" }, "← Back to the site")));
     f.addEventListener("submit", async function (e) {
-      e.preventDefault(); go.disabled = true; err.textContent = "";
+      e.preventDefault(); err.textContent = "";
+      if (!user.value.trim() || !pass.value) { err.textContent = "Enter your username and password."; return; }
+      go.disabled = true; go.textContent = "Signing in…";
       var r = await sb.auth.signInWithPassword({ email: EMAIL(user.value), password: pass.value });
-      if (r.error) { go.disabled = false; err.textContent = /invalid/i.test(r.error.message) ? "Wrong username or password." : r.error.message; return; }
+      go.disabled = false; go.textContent = "Log in";
+      if (r.error) {
+        err.textContent = /invalid login/i.test(r.error.message) ? "Wrong username or password." : /not confirmed/i.test(r.error.message) ? "This user isn’t confirmed yet. In Supabase, tick “Auto Confirm User”." : r.error.message;
+        return;
+      }
       start();
     });
-    app.appendChild(h("div", { class: "login" }, f)); user.focus();
+    app.appendChild(h("div", { class: "lg-wrap" }, h("div", { class: "lg-card" }, h("div", { class: "lg-band" }, h("div", { class: "lg-logo" }, aq), h("div", { class: "lg-logo" }, ds)), f)));
+    user.focus();
   }
-  async function logout() { await sb.auth.signOut(); showLogin(); }
+
+  var IDLE_MS = 30 * 60 * 1000, idleLeft = IDLE_MS, tickH = null;
+  function startTimer(chip) {
+    ["pointerdown", "keydown", "touchstart"].forEach(function (ev) { document.addEventListener(ev, function () { idleLeft = IDLE_MS; }, true); });
+    var txt = h("span", {}, "30:00"); chip.appendChild(ic("fa-clock")); chip.appendChild(txt);
+    tickH = setInterval(function () {
+      if (document.querySelector(".ovl")) idleLeft = IDLE_MS;           // never log out in the middle of editing
+      else idleLeft -= 1000;
+      var m = Math.max(0, Math.floor(idleLeft / 60000)), sec = Math.max(0, Math.floor(idleLeft / 1000) % 60);
+      txt.textContent = pad(m) + ":" + pad(sec); chip.classList.toggle("warn", idleLeft < 120000);
+      if (idleLeft <= 0) logout();
+    }, 1000);
+  }
+  async function logout() {
+    clearInterval(tickH); await sb.auth.signOut();
+    showLogin(); try { location.reload(); } catch (e) {}
+  }
 
   async function start() {
     try { SUBJECTS = await db(sb.from("subjects").select("*").order("year").order("sem").order("sort")); }
     catch (e) { showLogin("Could not load data. Is the Supabase project paused or the SQL not run yet?"); return; }
-    clear(app);
-    var main = h("main"), tabsBar = h("div", { class: "tabs" });
+    clear(app); document.body.classList.add("admin-page");
+    if (window.DSVBLayout) { DSVBLayout.top(); DSVBLayout.bottom(); }
+    var inc = document.createElement("script"); inc.src = "../js/includes.js"; inc.onload = function () { window.playAudio = function () {}; try { var th = localStorage.getItem("aana-theme"); if (th) document.documentElement.setAttribute("data-theme", th); } catch (e) {} }; document.body.appendChild(inc);
+
+    var main = h("div"), chip = h("span", { class: "session-timer", title: "You are logged out after 30 minutes without activity" });
+    var lock = h("button", { class: "lock-btn", type: "button", onclick: function () { setUnlocked(!UNLOCKED); } });
+    var tabsBar = h("div", { class: "main-tabs" });
     function open(id) {
       var t = TABS.filter(function (x) { return x[0] === id; })[0] || TABS[0];
-      Array.prototype.forEach.call(tabsBar.children, function (b) { b.classList.toggle("on", b.dataset.id === t[0]); });
+      Array.prototype.forEach.call(tabsBar.children, function (b) { b.classList.toggle("active", b.getAttribute("data-id") === t[0]); });
+      lock.style.display = NO_REORDER[t[0]] ? "none" : "";
       clear(main); history.replaceState(null, "", "#" + t[0]);
-      Promise.resolve(t[2](main)).catch(function (e) { console.error(e); });
+      Promise.resolve(t[3](main)).catch(function (e) { console.error(e); });
     }
-    TABS.forEach(function (t) { tabsBar.appendChild(h("button", { class: "tab", "data-id": t[0], type: "button", onclick: function () { open(t[0]); } }, t[1])); });
-    app.appendChild(h("div", { class: "top" }, h("div", { class: "bar" }, h("h1", {}, "ආනාගේ Kuppia · Admin"),
-      h("a", { class: "btn sm", href: "../index.html", target: "_blank", rel: "noopener" }, "View site ↗"), btn("Log out", "sm", logout)), tabsBar));
-    app.appendChild(main);
+    TABS.forEach(function (t) { tabsBar.appendChild(h("button", { class: "main-tab", "data-id": t[0], type: "button", onclick: function () { open(t[0]); } }, ic(t[1]), t[2])); });
+    app.appendChild(h("div", { class: "adm-wrap" },
+      h("div", { class: "adm-title-bar" },
+        h("div", {}, h("div", { class: "adm-title" }, h("span", { class: "adm-title-icon" }, ic("fa-screwdriver-wrench")), "Admin Panel"), h("div", { class: "adm-sub" }, "Manage your site content", chip)),
+        h("div", { class: "adm-actions" }, lock, h("button", { class: "logout-btn", type: "button", onclick: logout }, ic("fa-right-from-bracket"), "Logout"))),
+      tabsBar, main));
+    setUnlocked(false); startTimer(chip);
     open((location.hash || "").slice(1));
   }
 
@@ -837,6 +944,6 @@
     if (s && s.user && s.user.email === EMAIL("superadmin")) start(); else { if (s) await sb.auth.signOut(); showLogin(); }
   }
 
-  window.AdminLib = { parseTime: parseTime, fmtTime: fmtTime, parseLyricsText: parseLyricsText, toLrc: toLrc, cleanWhatsapp: cleanWhatsapp, guessType: guessType };
+  window.AdminLib = { parseTime: parseTime, fmtTime: fmtTime, parseLyricsText: parseLyricsText, toLrc: toLrc, cleanWhatsapp: cleanWhatsapp, guessType: guessType, applyOrder: applyOrder, acadYear: acadYear, EMAIL: EMAIL };
   boot();
 })();

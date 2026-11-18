@@ -321,7 +321,7 @@ function buildFileList(files) {
 // ── Accordion builders ─────────────────────────────────────
 function buildSubject(subj) {
   var watch = subj.recId
-    ? '<a href="recordings.html#' + subj.recId + '" class="watch-link"><i class="fa-solid fa-circle-play"></i> Watch all recordings for this subject \u2192</a>'
+    ? '<a href="recordings#' + subj.recId + '" class="watch-link"><i class="fa-solid fa-circle-play"></i> Watch all recordings for this subject \u2192</a>'
     : '';
   return '<div class="subj-item" data-acc-item id="' + subj.id + '">' +
     '<button class="subj-head acc-head" data-acc-head aria-expanded="false">' +
