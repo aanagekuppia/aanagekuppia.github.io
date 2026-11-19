@@ -1,0 +1,19 @@
+{
+  // Cloudflare reads this file when it deploys the Worker from GitHub.
+  // The ONLY thing you must edit: replace PASTE_KV_ID_HERE with the id of your dsvb-kv namespace
+  // (Cloudflare dashboard > Storage & Databases > KV > dsvb-kv > copy the "ID").
+  "name": "dsvb-ai",
+  "main": "index.js",
+  "compatibility_date": "2026-06-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "kv_namespaces": [ { "binding": "KV", "id": "PASTE_KV_ID_HERE" } ],
+  "ai": { "binding": "AI" },
+  "vars": {
+    "ALLOWED_ORIGIN": "https://aanagekuppia.github.io",
+    "SUPABASE_URL": "https://sshzkkldqqdtbrkswcyi.supabase.co",
+    "SUPABASE_KEY": "sb_publishable_3lnQ0EmJNi4QXOjbLmADdA_bTWM2XQ2"
+  },
+  // keeps the free Supabase project awake (every 3 days)
+  "triggers": { "crons": [ "17 3 */3 * *" ] }
+}

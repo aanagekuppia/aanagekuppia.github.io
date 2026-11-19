@@ -1,0 +1,5 @@
+{
+  "books": [
+    { "id": "frankenstein", "path": "y1s2/frankenstein", "title": "Frankenstein", "author": "Mary Shelley", "year": 1, "semester": 2, "subject": "y1s2-litper" }
+  ]
+}
