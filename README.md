@@ -17,7 +17,10 @@ js/                  page scripts
 assets/logos/        your 6 logo files (Aquinas + DSVB)
 supabase/01-schema.sql   run once in Supabase (tables + security)
 supabase/02-migrate-old-data.sql   run once AFTER 01 (brings over your old data)
-workers/             optional Cloudflare download proxy
+supabase/03-ai-logs.sql            run once (saved AI answers)
+workers/ai/          the AI Worker (deploys automatically from GitHub, see SETUP-2)
+workers/             download proxy (optional)
+ai/library/          books for the AI chat + BOOK-BUILDER.md (how to add a book)
 .github/workflows/   keeps the free Supabase project from pausing
 ```
 
