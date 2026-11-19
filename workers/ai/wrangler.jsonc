@@ -7,7 +7,7 @@
   "compatibility_date": "2026-06-01",
   "workers_dev": true,
   "observability": { "enabled": true },
-  "kv_namespaces": [ { "binding": "KV", "id": "PASTE_KV_ID_HERE" } ],
+  "kv_namespaces": [ { "binding": "KV", "id": "86058b9611f0407da3529b26b77f6ca2" } ],
   "ai": { "binding": "AI" },
   "vars": {
     "ALLOWED_ORIGIN": "https://aanagekuppia.github.io",
