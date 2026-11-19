@@ -73,4 +73,23 @@
   }
   // Pages call DSVBLayout.bottom() exactly where the old PHP include used to be (after </main>).
   window.DSVBLayout = { top: top, bottom: bottom };
+
+  // ---- smooth touches (additive: a quick tap pulse, and pages pre-load as you hover / touch a link) ----
+  (function () {
+    var TAP = ".qn,.nav-btn,.mem-nav-btn,.ctrl-btn,.car-arrow,.dl-btn,.vid-item,.wa-help,.vid-note-btn,.ai-btn,.wa-btn,.btn,.main-tab,.t-subj,.t-year,.t-sem,.lock-btn,.logout-btn";
+    document.addEventListener("pointerdown", function (e) {
+      var t = e.target.closest && e.target.closest(TAP);
+      if (!t || !t.animate || (e.button && e.button > 0)) return;
+      try { t.animate([{ scale: 1 }, { scale: 0.955 }, { scale: 1 }], { duration: 230, easing: "ease-out" }); } catch (x) {}
+    }, { passive: true });
+    var seen = {}, saver = navigator.connection && navigator.connection.saveData;
+    function prefetch(e) {
+      var a = e.target.closest && e.target.closest("a[href]");
+      if (!a || saver || window.DSVB_MANUAL || a.origin !== location.origin || a.target === "_blank" || a.hasAttribute("download")) return;
+      var p = a.pathname; if (seen[p] || p === location.pathname || /\/loader$/.test(p)) return;
+      seen[p] = 1; var l = document.createElement("link"); l.rel = "prefetch"; l.href = a.href; document.head.appendChild(l);
+    }
+    document.addEventListener("pointerover", prefetch, { passive: true });
+    document.addEventListener("touchstart", prefetch, { passive: true });
+  })();
 })();

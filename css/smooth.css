@@ -1,0 +1,31 @@
+/* ============================================================
+   smooth.css  -  extra polish only. Nothing here replaces an existing
+   effect or animation: it adds page crossfades, a soft entrance for
+   page content, clearer focus and nicer text rendering.
+   ============================================================ */
+/* pages crossfade instead of flashing white (Chrome / Edge / Safari 18+; older browsers just navigate normally) */
+@view-transition{navigation:auto}
+::view-transition-old(root){animation:vtOut .18s ease both}
+::view-transition-new(root){animation:vtIn .26s ease both}
+@keyframes vtOut{to{opacity:0}}
+@keyframes vtIn{from{opacity:0}}
+body>header{view-transition-name:site-header}
+body>footer{view-transition-name:site-footer}
+::view-transition-group(site-header),::view-transition-group(site-footer){animation-duration:0s}
+
+/* soft entrance for the content of every page (low specificity: an element's own animation always wins) */
+main>*{animation:smoothIn .5s cubic-bezier(.2,.7,.2,1) backwards}
+main>*:nth-child(2){animation-delay:.04s}main>*:nth-child(3){animation-delay:.08s}main>*:nth-child(4){animation-delay:.12s}
+main>*:nth-child(5){animation-delay:.16s}main>*:nth-child(n+6){animation-delay:.2s}
+@keyframes smoothIn{from{opacity:0;translate:0 10px}}
+
+/* crisp, comfortable text */
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;-webkit-text-size-adjust:100%}
+a,button,[role=button],label,select,summary{-webkit-tap-highlight-color:transparent}
+::selection{background:rgba(59,130,246,.28)}
+[class*=modal],[class*=lightbox],[class*=-ovl],.lyrics-box,.tree-scroll{overscroll-behavior:contain}
+
+/* keyboard users get a clear ring; mouse and touch users never see it */
+:focus{outline:none}
+:focus-visible{outline:3px solid rgba(59,130,246,.65);outline-offset:3px;border-radius:8px}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline-offset:1px}
