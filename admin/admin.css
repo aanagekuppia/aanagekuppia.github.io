@@ -195,3 +195,82 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 
 .drag-over-top{box-shadow:0 -3px 0 0 var(--accent)}
 .drag-over-bot{box-shadow:0 3px 0 0 var(--accent)}
+
+/* ============================================================
+   Readability pass: roomier spacing, larger text. The wide Syne font
+   stays only on the big "Admin Panel" title; everything small uses Nunito.
+   ============================================================ */
+.busy-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:10001;opacity:0;pointer-events:none;transition:opacity .25s;
+  background:linear-gradient(90deg,transparent 0,var(--accent) 30%,#ffd84d 60%,transparent 100%);background-size:60% 100%;background-repeat:no-repeat;animation:busySlide 1.1s ease-in-out infinite}
+body.busy .busy-bar{opacity:1}
+@keyframes busySlide{0%{background-position:-60% 0}100%{background-position:160% 0}}
+
+.adm-wrap{max-width:1060px}
+.adm-sub{font-size:.76rem;gap:.55rem}
+.session-timer{font-size:.72rem;padding:.25rem .7rem}
+.logout-btn,.lock-btn{font-size:.76rem;padding:.5rem .95rem;border-radius:10px}
+.main-tabs{padding:.35rem;gap:.35rem;border-radius:14px}
+.main-tab{font-size:.8rem;padding:.65rem .85rem;min-width:92px;border-radius:10px}
+.main-tab i{font-size:.88rem}
+
+.panel{gap:1rem}
+.tree-col{width:285px;border-radius:14px}
+.tree-hd{font-size:.74rem;padding:.8rem 1rem;letter-spacing:.07em}
+.t-year{font-family:Nunito,sans-serif;font-weight:800;font-size:.88rem;padding:.75rem 1rem;gap:.55rem}
+.t-year small{font-size:.7rem}
+.t-sem{font-size:.8rem;padding:.65rem 1rem .65rem 1.4rem;gap:.5rem}
+.t-subj{font-size:.82rem;padding:.65rem 1rem .65rem 2rem;line-height:1.45;gap:.5rem;font-weight:700}
+.t-subj i{font-size:.7rem}
+.t-chev{font-size:.7rem}
+
+.card{padding:1.15rem 1.3rem;border-radius:14px;margin-bottom:1rem}
+.card h2{font-family:Nunito,sans-serif;font-size:1.05rem;font-weight:800;letter-spacing:0;line-height:1.35}
+.head{margin-bottom:.9rem;gap:.8rem}
+.muted{font-size:.8rem;line-height:1.55}
+.group{font-size:.7rem;margin:1.2rem 0 .6rem;letter-spacing:.07em}
+.empty{font-size:.86rem;padding:1.8rem 1rem}
+.list{gap:.6rem}
+.row{padding:.85rem 1.05rem;border-radius:12px;gap:.9rem}
+.row .t{font-size:.92rem;line-height:1.4}
+.row .s{font-size:.78rem;margin-top:.3rem;line-height:1.6}
+.row img.th{width:72px;height:50px}
+.badge{font-size:.64rem;padding:.2rem .6rem;margin-right:.45rem}
+.btn{font-size:.8rem;padding:.55rem 1.05rem;min-height:38px;border-radius:10px;gap:.4rem}
+.btn.sm{font-size:.76rem;padding:.42rem .8rem;min-height:32px;border-radius:9px}
+.btn.ico{min-width:2.2rem}
+.btn.big{font-size:.95rem;min-height:48px}
+.drag-handle{width:32px;height:32px;font-size:1rem}
+.content-placeholder{font-size:.92rem;padding:3rem 1rem}
+
+.modal{border-radius:16px}
+.modal h3{font-family:Nunito,sans-serif;font-size:1.02rem;padding:1rem 1.3rem}
+.modal>form,.modal>div{padding:1.2rem 1.3rem}
+.fld{margin-bottom:1rem}
+.fld label{font-size:.72rem;margin-bottom:.4rem}
+.fld label.chk{font-size:.88rem}
+.fld .hint{font-size:.74rem;margin-top:.4rem;line-height:1.5}
+input[type=text],input[type=password],input[type=number],input[type=date],input[type=url],select,textarea{font-size:.92rem;padding:.7rem .95rem;border-radius:10px;min-height:44px}
+textarea{min-height:90px;line-height:1.5}
+.err{font-size:.82rem}
+.foot{margin:1rem -1.3rem -1.2rem;padding:1rem 1.3rem;gap:.6rem}
+.two{gap:.8rem}
+#toast{font-size:.88rem;padding:.7rem 1.2rem;border-radius:12px}
+.mrow{padding:.85rem;border-radius:12px}
+.lrow{grid-template-columns:104px 1fr auto;gap:.5rem;padding:.3rem}
+.lrow input[type=text]{min-height:40px}
+.lyr-tools{gap:.5rem}
+
+@media (max-width:760px){
+  .tree-col{width:100%}
+  .tree-hd{font-size:.78rem}
+  .t-subj{font-size:.88rem;padding:.75rem 1rem .75rem 2rem}
+  .t-sem{font-size:.86rem}
+  .t-year{font-size:.92rem}
+}
+@media (max-width:560px){
+  .card{padding:1rem}
+  .row .t{font-size:.95rem}
+  .row .s{font-size:.8rem}
+  .main-tab{font-size:.82rem;padding:.65rem .9rem}
+  .lrow{grid-template-columns:90px 1fr}
+}

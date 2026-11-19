@@ -10,6 +10,58 @@
   var EMAIL = function (u) { u = String(u || "").trim().toLowerCase(); return u.indexOf("@") >= 0 ? u : u + "@" + (C.ADMIN_EMAIL_DOMAIN || "aanagekuppia.github.io"); };
   var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
+  /* ---------- speed: remember lists between visits, thin progress bar while loading ---------- */
+  var MEM = {}, GEN = 0, SKEY = "adm:c:", busyN = 0, LOADED = {};
+  function busy(d) { busyN = Math.max(0, busyN + d); document.body.classList.toggle("busy", busyN > 0); }
+  function bust() {                                    // any write makes remembered lists out of date
+    GEN++; MEM = {};
+    try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf(SKEY) === 0) localStorage.removeItem(k); }); } catch (e) {}
+  }
+  (function () {
+    var from = sb.from.bind(sb);
+    sb.from = function (t) {
+      var q = from(t);
+      ["insert", "update", "delete", "upsert"].forEach(function (m) { var o = q[m]; if (o) q[m] = function () { bust(); return o.apply(q, arguments); }; });
+      return q;
+    };
+  })();
+  // Shows the remembered copy at once, then quietly checks for newer data and redraws only if something changed.
+  async function swr(key, fetcher, redraw) {
+    var hit = MEM[key];
+    if (!hit) { try { var saved = JSON.parse(localStorage.getItem(SKEY + key)); if (saved) hit = MEM[key] = { data: saved, t: 0 }; } catch (e) {} }
+    var gen = GEN;
+    function store(data) { MEM[key] = { data: data, t: Date.now() }; try { localStorage.setItem(SKEY + key, JSON.stringify(data)); } catch (e) {} }
+    if (hit) {
+      if (Date.now() - hit.t > 4000) {
+        hit.t = Date.now();
+        fetcher().then(function (fresh) {
+          if (gen !== GEN) return;
+          var same = JSON.stringify(fresh) === JSON.stringify(hit.data);
+          store(fresh); if (!same && redraw) redraw();
+        }).catch(function () {});
+      }
+      return hit.data;
+    }
+    var data = await fetcher(); if (gen === GEN) store(data); return data;
+  }
+  function loadScript(src) {                           // load a heavy script only when it is first needed
+    if (LOADED[src]) return LOADED[src];
+    return (LOADED[src] = new Promise(function (res, rej) { var s = document.createElement("script"); s.src = src; s.async = true; s.onload = res; s.onerror = rej; document.head.appendChild(s); }));
+  }
+  var subjPromise = null;                              // the subject list is public, so fetch it while the page is still starting up
+  function prefetchSubjects() {
+    if (!subjPromise) subjPromise = (typeof fetch !== "function" ? Promise.reject(new Error("no fetch")) : fetch(C.SUPABASE_URL + "/rest/v1/subjects?select=*&order=year,sem,sort", { headers: { apikey: C.SUPABASE_KEY } })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }));
+    return subjPromise;
+  }
+  prefetchSubjects().catch(function () {});
+  async function loadSubjects() {
+    var cached = null; try { cached = JSON.parse(localStorage.getItem("adm:subjects")); } catch (e) {}
+    var fresh = prefetchSubjects().then(function (rows) { try { localStorage.setItem("adm:subjects", JSON.stringify(rows)); } catch (e) {} return rows; });
+    if (cached && cached.length) { fresh.catch(function () {}); return cached; }
+    try { return await fresh; } catch (e) { return db(sb.from("subjects").select("*").order("year").order("sem").order("sort")); }
+  }
+
   /* ---------- tiny DOM helper (text is always inserted as text, never as HTML) ---------- */
   function h(tag, props) {
     var el = document.createElement(tag), later = null;
@@ -40,7 +92,8 @@
     toast._t = setTimeout(function () { t.className = ""; }, kind === "err" ? 5000 : 2200);
   }
   async function db(p) {
-    var r = await p;
+    var r; busy(1);
+    try { r = await p; } finally { busy(-1); }
     if (r.error) { toast(r.error.message || "Database error", "err"); throw r.error; }
     return r.data;
   }
@@ -170,7 +223,8 @@
     document.addEventListener("pointermove", move); document.addEventListener("pointerup", up); document.addEventListener("pointercancel", cancel);
   });
   function kind(url) {
-    var c = window.DSVBPlayer ? DSVBPlayer.classify(url).type : "external";
+    url = String(url || "");
+    var c = /(youtube\.com|youtu\.be)/i.test(url) ? "youtube" : /drive\.google\.com/i.test(url) ? "drive" : /vimeo\.com/i.test(url) ? "vimeo" : /\.(mp4|webm|ogg|mov|m4v)(\?|#|$)/i.test(url) ? "direct" : "external";
     return { youtube: ["yt", "YouTube"], drive: ["drive", "Drive"], vimeo: ["vimeo", "Vimeo"], direct: ["", "Video file"] }[c] || ["warn", "Link"];
   }
   function guessType(url) {
@@ -239,9 +293,10 @@
      ============================================================ */
   async function tabRecordings(host) {
     subjectTab(host, "Recordings", async function (body, subj) {
+      function again() { if (body.isConnected && SEL.id === subj.id) draw(); }
       async function draw() {
-        var rows = sortRows(await db(sb.from("recordings").select("*").eq("subject_id", subj.id)));
-        var hasNotes = (await db(sb.from("notes").select("id").eq("subject_id", subj.id).limit(1))).length > 0;
+        var pair = await swr("rec:" + subj.id, function () { return Promise.all([db(sb.from("recordings").select("*").eq("subject_id", subj.id)), db(sb.from("notes").select("id").eq("subject_id", subj.id).limit(1))]); }, again);
+        var rows = sortRows(pair[0]), hasNotes = pair[1].length > 0;
         clear(body);
         var card = h("div", { class: "card" });
         card.appendChild(h("div", { class: "head" }, h("h2", {}, subj.name + " — " + rows.length + " video" + (rows.length === 1 ? "" : "s")),
@@ -261,8 +316,9 @@
         card.appendChild(list); body.appendChild(card);
       }
       function preview(r) {
-        var box = h("div"), o = bigModal(r.label, box, { onClose: function () { DSVBPlayer.destroy(box); } });
-        DSVBPlayer.mount(box, r.url, { title: r.label, autoplay: false, compact: true });
+        var box = h("div"), o = bigModal(r.label, box, { onClose: function () { if (window.DSVBPlayer) DSVBPlayer.destroy(box); } });
+        box.appendChild(h("div", { class: "muted" }, "Loading player…"));
+        loadScript("../js/players.js").then(function () { DSVBPlayer.mount(box, r.url, { title: r.label, autoplay: false, compact: true }); });
       }
       function edit(r, rows) {
         var nextDay = pad(rows.length + 1), m = r && /^Day\s*(\d+)\s*-\s*(\d{4})\.(\d{2})\.(\d{2})/i.exec(r.label || "");
@@ -302,8 +358,9 @@
   var NCAT = [["lecturer", "Lecturer notes"], ["aana", "Old student notes (ආනා)"], ["paper", "Past papers"]];
   async function tabNotes(host) {
     subjectTab(host, "Notes & past papers", function (body, subj) {
+      function again() { if (body.isConnected && SEL.id === subj.id) draw(); }
       async function draw() {
-        var all = sortRows(await db(sb.from("notes").select("*").eq("subject_id", subj.id)));
+        var all = sortRows(await swr("notes:" + subj.id, function () { return db(sb.from("notes").select("*").eq("subject_id", subj.id)); }, again));
         clear(body);
         var card = h("div", { class: "card" });
         card.appendChild(h("div", { class: "head" }, h("h2", {}, subj.name + " — " + all.length + " file" + (all.length === 1 ? "" : "s")),
@@ -355,8 +412,9 @@
      ============================================================ */
   async function tabAssignments(host) {
     subjectTab(host, "Assignments", function (body, subj) {
+      function again() { if (body.isConnected && SEL.id === subj.id) draw(); }
       async function draw() {
-        var rows = sortRows(await db(sb.from("assignments").select("*, assignment_files(*)").eq("subject_id", subj.id)));
+        var rows = sortRows(await swr("asg:" + subj.id, function () { return db(sb.from("assignments").select("*, assignment_files(*)").eq("subject_id", subj.id)); }, again));
         clear(body);
         var card = h("div", { class: "card" });
         card.appendChild(h("div", { class: "head" }, h("h2", {}, subj.name + " — " + rows.length + " assignment" + (rows.length === 1 ? "" : "s")),
@@ -538,8 +596,9 @@
 
   async function tabSongs(host) {
     var body = h("div"); host.appendChild(body);
+    function again() { if (body.isConnected) draw(); }
     async function draw() {
-      var rows = sortRows(await db(sb.from("songs").select("*")));
+      var rows = sortRows(await swr("songs", function () { return db(sb.from("songs").select("*")); }, again));
       clear(body);
       var card = h("div", { class: "card" });
       card.appendChild(h("div", { class: "head" }, h("h2", {}, "Songs — " + rows.length), btn("+ Add song", "pri", function () { edit(null, rows); })));
@@ -592,8 +651,9 @@
   var stripTags = function (s) { return String(s || "").replace(/<[^>]*>/g, ""); };
   async function tabNotifications(host) {
     var body = h("div"); host.appendChild(body);
+    function again() { if (body.isConnected) draw(); }
     async function draw() {
-      var cats = sortRows(await db(sb.from("notification_categories").select("*, notifications(*)")));
+      var cats = sortRows(await swr("notif", function () { return db(sb.from("notification_categories").select("*, notifications(*)")); }, again));
       clear(body);
       var top = h("div", { class: "card" }, h("div", { class: "head" }, h("h2", {}, "Notifications"), btn("+ Add category", "pri", function () { editCat(null, cats); })),
         h("div", { class: "muted" }, "Notifications are grouped into categories. Hidden ones stay saved but don't show on the site."));
@@ -664,8 +724,9 @@
      ============================================================ */
   async function tabCarousel(host) {
     var body = h("div"); host.appendChild(body);
+    function again() { if (body.isConnected) draw(); }
     async function draw() {
-      var rows = sortRows(await db(sb.from("carousel_items").select("*")));
+      var rows = sortRows(await swr("carousel", function () { return db(sb.from("carousel_items").select("*")); }, again));
       clear(body);
       var card = h("div", { class: "card" }, h("div", { class: "head" }, h("h2", {}, "Home page slideshow — " + rows.length), btn("+ Add slide", "pri", function () { edit(null, rows); })),
         h("div", { class: "muted", style: "margin-bottom:.6rem" }, "Put the picture/video file into the repo first (for example assets/carousal/img04.webp), then type its path here."));
@@ -714,8 +775,9 @@
      ============================================================ */
   async function tabMemories(host) {
     var body = h("div"); host.appendChild(body);
+    function again() { if (body.isConnected) draw(); }
     async function draw() {
-      var rows = sortRows(await db(sb.from("memories").select("*")));
+      var rows = sortRows(await swr("memories", function () { return db(sb.from("memories").select("*")); }, again));
       clear(body);
       var card = h("div", { class: "card" }, h("div", { class: "head" }, h("h2", {}, "Memories — " + rows.length), btn("+ Add memory", "pri", function () { edit(null, rows); })));
       if (!rows.length) card.appendChild(h("div", { class: "empty" }, "No memories yet."));
@@ -863,6 +925,7 @@
     ["memories", "fa-camera-retro", "Memories", tabMemories], ["settings", "fa-gear", "Settings", tabSettings], ["backup", "fa-floppy-disk", "Backup", tabBackup]];
   var NO_REORDER = { settings: 1, backup: 1 };
   var app = document.getElementById("app");
+  document.body.appendChild(h("div", { class: "busy-bar" }));
 
   function showLogin(msg) {
     clear(app); document.body.classList.remove("admin-page");
@@ -892,6 +955,7 @@
     });
     app.appendChild(h("div", { class: "lg-wrap" }, h("div", { class: "lg-card" }, h("div", { class: "lg-band" }, h("div", { class: "lg-logo" }, aq), h("div", { class: "lg-logo" }, ds)), f)));
     user.focus();
+    setTimeout(function () { loadScript("../assets/logos/aquinas-logo.js"); loadScript("../assets/logos/dsvb-logo.js"); }, 40);
   }
 
   var IDLE_MS = 30 * 60 * 1000, idleLeft = IDLE_MS, tickH = null;
@@ -912,11 +976,11 @@
   }
 
   async function start() {
-    try { SUBJECTS = await db(sb.from("subjects").select("*").order("year").order("sem").order("sort")); }
+    try { SUBJECTS = await loadSubjects(); }
     catch (e) { showLogin("Could not load data. Is the Supabase project paused or the SQL not run yet?"); return; }
     clear(app); document.body.classList.add("admin-page");
     if (window.DSVBLayout) { DSVBLayout.top(); DSVBLayout.bottom(); }
-    var inc = document.createElement("script"); inc.src = "../js/includes.js"; inc.onload = function () { window.playAudio = function () {}; try { var th = localStorage.getItem("aana-theme"); if (th) document.documentElement.setAttribute("data-theme", th); } catch (e) {} }; document.body.appendChild(inc);
+    window.DSVB_NO_PRELOAD = true; var inc = document.createElement("script"); inc.src = "../js/includes.js"; inc.onload = function () { window.playAudio = function () {}; try { var th = localStorage.getItem("aana-theme"); if (th) document.documentElement.setAttribute("data-theme", th); } catch (e) {} }; document.body.appendChild(inc);
 
     var main = h("div"), chip = h("span", { class: "session-timer", title: "You are logged out after 30 minutes without activity" });
     var lock = h("button", { class: "lock-btn", type: "button", onclick: function () { setUnlocked(!UNLOCKED); } });

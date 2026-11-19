@@ -12,26 +12,29 @@
   function lsGet(k) { try { return JSON.parse(localStorage.getItem("dsvb:" + k)); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem("dsvb:" + k, JSON.stringify(v)); } catch (e) {} }
 
-  // One REST call. Falls back to the last good copy if the network (or a paused project) fails.
+  // One REST call. A returning visitor never waits more than ~1.5 s: the saved copy from the last visit is shown
+  // and the fresh answer is stored for next time. A first-time visitor has to wait for the network.
+  var SOFT_WAIT = 1500;
   function rest(table, query) {
     var key = "t:" + table + "?" + query;
     if (!READY) return Promise.reject(new Error("Site not configured yet (js/config.js)."));
+    var cached = lsGet(key);
     var ctl = ("AbortController" in window) ? new AbortController() : null;
-    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, TIMEOUT);
-    return fetch(C.SUPABASE_URL + "/rest/v1/" + table + "?" + query, {
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 12000);
+    var net = fetch(C.SUPABASE_URL + "/rest/v1/" + table + "?" + query, {
       headers: { apikey: C.SUPABASE_KEY, Accept: "application/json" },
       signal: ctl ? ctl.signal : undefined
     }).then(function (r) {
       clearTimeout(timer);
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
-    }).then(function (rows) { lsSet(key, rows); return rows; })
-      .catch(function (err) {
-        clearTimeout(timer);
-        var old = lsGet(key);
-        if (old) return old;
-        throw err;
-      });
+    }).then(function (rows) { lsSet(key, rows); return rows; });
+    if (!cached) return net;
+    return new Promise(function (resolve) {
+      var done = false, t = setTimeout(function () { if (!done) { done = true; resolve(cached); } }, SOFT_WAIT);
+      net.then(function (rows) { if (!done) { done = true; clearTimeout(t); resolve(rows); } },
+               function () { if (!done) { done = true; clearTimeout(t); resolve(cached); } });
+    });
   }
 
   function fileObj(r) { return { name: r.name, desc: r.description, fileType: r.file_type, url: r.url }; }
