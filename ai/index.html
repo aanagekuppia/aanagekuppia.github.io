@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
+<title>Study Buddy — ආනාගේ Kuppia</title>
+<meta name="description" content="Chat with ආනා, your English study buddy. Ask about English or about the books you study.">
+<meta name="theme-color" content="#0d1e3b">
+<script>
+(function(){var p=location.pathname;if(/\/index\.html$/.test(p))history.replaceState(null,'',p.replace(/index\.html$/,'')+location.search+location.hash)})();
+window.DSVB_BASE='../';window.DSVB_SUB='Study Buddy · chat with ආනා';window.DSVB_NO_PRELOAD=true;
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://dsvb-ai.aanagekuppia.workers.dev" crossorigin><link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Nunito:wght@300;400;600;700;800&family=Lora:ital,wght@0,400;0,600;1,400&family=Noto+Sans+Sinhala:wght@400;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Nunito:wght@300;400;600;700;800&family=Lora:ital,wght@0,400;0,600;1,400&family=Noto+Sans+Sinhala:wght@400;600;700&display=swap"></noscript>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"></noscript>
+<link rel="stylesheet" href="../css/includes.css"><link rel="stylesheet" href="../css/smooth.css"><link rel="stylesheet" href="chat.css">
+<script defer src="../assets/logos/dsvb-logo-footer.js"></script>
+</head>
+<body class="ai-page">
+<script src="../js/config.js"></script>
+<script src="../js/layout.js"></script>
+<main class="ai-main">
+  <section class="ai-hero">
+    <dsvb-logo-footer size="190" align="center" intensity="1" title="DSVB"></dsvb-logo-footer>
+    <div class="hero-row">
+      <img class="hero-av" src="../assets/admin/admin.webp" alt="ආනා" onerror="this.onerror=null;this.src='../assets/admin/admin.jpg'">
+      <div class="hero-txt"><h1><span class="si">ආනා</span> Study Buddy</h1><p>Ask me about English, or pick a book from the Topic menu.</p></div>
+    </div>
+  </section>
+  <div class="topicbar" id="topicbar">
+    <button class="topic-chip" id="topicBtn" type="button" aria-haspopup="dialog">
+      <i class="fa-solid fa-book-open-reader"></i>
+      <span class="tc-txt"><small>Topic</small><b id="topicName">General chat</b></span>
+      <i class="fa-solid fa-chevron-down tc-ch"></i>
+    </button>
+    <button class="icon-btn" id="newChat" type="button" title="Start a new chat" aria-label="Start a new chat"><i class="fa-solid fa-broom"></i></button>
+  </div>
+  <div class="chat" id="chat" role="log" aria-live="polite" aria-label="Conversation"></div>
+</main>
+<div class="composer" id="composer">
+  <div class="composer-in">
+    <div class="controls">
+      <label class="sel" title="How long and how simple the answer is"><i class="fa-solid fa-align-left"></i><span class="sel-l">Style</span>
+        <select id="styleSel" aria-label="Answer style"><option value="short">Short answer</option><option value="normal">Normal</option><option value="simple">Explain simply</option><option value="detailed">Detailed</option></select></label>
+      <label class="sel" title="How hard ආනා thinks. Deep is slower but better."><i class="fa-solid fa-brain"></i><span class="sel-l">Thinking</span>
+        <select id="thinkSel" aria-label="How hard to think"><option value="fast">Fast</option><option value="balanced">Balanced</option><option value="deep">Deep thinking</option></select></label>
+      <button class="key-btn" id="keyBtn" type="button" title="Use your own AI key"><i class="fa-solid fa-key"></i><span id="keyTxt">My key</span></button>
+    </div>
+    <div class="inputrow">
+      <textarea id="msgBox" rows="1" placeholder="Ask ආනා anything…" aria-label="Your question" maxlength="400" enterkeyhint="send"></textarea>
+      <button class="send" id="sendBtn" type="button" aria-label="Send"><i class="fa-solid fa-paper-plane"></i></button>
+    </div>
+  </div>
+</div>
+<script>DSVBLayout.bottom()</script>
+<script defer src="../js/includes.js"></script>
+<script src="prompt.js"></script>
+<script src="retrieve.js"></script>
+<script defer src="chat.js"></script>
+</body>
+</html>

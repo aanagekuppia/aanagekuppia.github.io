@@ -6,6 +6,7 @@
 window.DSVB_CONFIG = {
   SUPABASE_URL: "https://sshzkkldqqdtbrkswcyi.supabase.co",        // e.g. https://abcdxyz.supabase.co
   SUPABASE_KEY: "sb_publishable_3lnQ0EmJNi4QXOjbLmADdA_bTWM2XQ2",    // starts with sb_publishable_
+  AI_WORKER: "https://dsvb-ai.aanagekuppia.workers.dev",   // the AI Worker (Cloudflare)
   DOWNLOAD_PROXY: "",                            // Cloudflare Worker link for downloads (optional, see workers/README)
   ADMIN_EMAIL_DOMAIN: "aanagekuppia.github.io",  // do not change
   MUSIC_DIR: "music/"                            // mp3 files for the Music page live here (same folder as before)

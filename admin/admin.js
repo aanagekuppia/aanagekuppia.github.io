@@ -918,12 +918,85 @@
   }
 
   /* ============================================================
+     AI DATA (saved answers, quality signals, export for training)
+     ============================================================ */
+  function toJsonl(rows) {                               // one training example per line (chat format)
+    return rows.map(function (r) { return JSON.stringify({ messages: [{ role: "user", content: r.question }, { role: "assistant", content: r.answer }], book: r.book || null, mode: r.mode || null, effort: r.effort || null, rating: r.rating || 0 }); }).join("\n") + "\n";
+  }
+  async function fetchAll(table, build) {                // the database hands out 1000 rows at a time
+    var out = [], from = 0;
+    for (;;) { var part = await db(build(sb.from(table)).range(from, from + 999)); out = out.concat(part); if (part.length < 1000) break; from += 1000; }
+    return out;
+  }
+  function download(name, text, type) {
+    var a = h("a", { href: URL.createObjectURL(new Blob([text], { type: type || "text/plain" })), download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  async function tabAiData(host) {
+    var body = h("div"); host.appendChild(body);
+    var F = { kind: "all", book: "", term: "" };
+    async function draw() {
+      var rows = await db(sb.from("ai_logs").select("*").order("created_at", { ascending: false }).limit(300));
+      clear(body);
+      var cnt = function (f) { return rows.filter(f).length; }, worker = rows.filter(function (r) { return r.source === "worker"; });
+      var stats = [["Saved answers", rows.length], ["👍 Good", cnt(function (r) { return r.rating === 1; })], ["👎 Not helpful", cnt(function (r) { return r.rating === -1; })], ["Tried again", cnt(function (r) { return r.retried; })],
+        ["Copied", cnt(function (r) { return r.copied; })], ["Quotes verified", worker.length ? Math.round(100 * worker.filter(function (r) { return r.verified; }).length / worker.length) + "%" : "-"], ["Own key", cnt(function (r) { return r.source === "byok"; })]];
+      var top = h("div", { class: "card" }, h("div", { class: "head" }, h("h2", {}, "AI data"),
+        h("div", { style: "display:flex;gap:.4rem;flex-wrap:wrap" },
+          btn("⬇ Good answers (training file)", "pri sm", async function (ev) {
+            ev.target.disabled = true; try { var good = await fetchAll("ai_training", function (q) { return q.select("*").order("created_at"); }); if (!good.length) { toast("No good answers yet."); return; } download("kuppia-training-" + today() + ".jsonl", toJsonl(good), "application/x-ndjson"); toast(good.length + " answers exported", "ok"); } finally { ev.target.disabled = false; } }),
+          btn("⬇ Everything (JSON)", "sm", async function (ev) {
+            ev.target.disabled = true; try { var all = await fetchAll("ai_logs", function (q) { return q.select("*").order("created_at"); }); download("kuppia-ai-logs-" + today() + ".json", JSON.stringify(all, null, 1), "application/json"); toast(all.length + " rows exported", "ok"); } finally { ev.target.disabled = false; } }))),
+        h("div", { class: "muted" }, "Every answer ආනා gives is saved without any name or IP. 👍, copying, and “Try again” tell you which answers were good. The training file contains only real-quote answers that nobody retried or thumbed down."),
+        h("div", { style: "display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.8rem" }, stats.map(function (x) { return h("span", { class: "badge", style: "padding:.35rem .7rem;font-size:.72rem" }, x[0] + ": ", h("b", {}, String(x[1]))); })));
+      body.appendChild(top);
+      var books = {}; rows.forEach(function (r) { if (r.book) books[r.book] = 1; });
+      var KINDS = [["all", "All"], ["good", "👍 Good"], ["bad", "👎 Bad"], ["retried", "Tried again"], ["unverified", "Quotes not verified"], ["byok", "Own key"]];
+      var term = h("input", { type: "text", placeholder: "Search questions and answers…", value: F.term, style: "flex:1;min-width:160px" });
+      var bsel = h("select", { style: "width:auto" }, h("option", { value: "" }, "All books"), Object.keys(books).map(function (b) { return h("option", { value: b }, b); })); bsel.value = F.book;
+      var listBox = h("div", { class: "list" });
+      function match(r) {
+        if (F.kind === "good" && r.rating !== 1) return false; if (F.kind === "bad" && r.rating !== -1) return false; if (F.kind === "retried" && !r.retried) return false;
+        if (F.kind === "unverified" && (r.verified || r.source === "byok" || r.topic === "general")) return false; if (F.kind === "byok" && r.source !== "byok") return false;
+        if (F.book && r.book !== F.book) return false;
+        if (F.term && (r.question + " " + r.answer).toLowerCase().indexOf(F.term.toLowerCase()) < 0) return false; return true;
+      }
+      function paint() {
+        clear(listBox); var shown = rows.filter(match);
+        if (!shown.length) listBox.appendChild(h("div", { class: "empty" }, rows.length ? "Nothing matches these filters." : "No answers saved yet. They appear here as students chat."));
+        shown.slice(0, 120).forEach(function (r) {
+          listBox.appendChild(h("div", { class: "row" },
+            h("div", { class: "main" }, h("div", { class: "t" }, r.question),
+              h("div", { class: "s" }, r.rating === 1 ? h("span", { class: "badge" }, "👍") : null, r.rating === -1 ? h("span", { class: "badge warn" }, "👎") : null, r.retried ? h("span", { class: "badge warn" }, "tried again") : null, r.copied ? h("span", { class: "badge" }, "copied") : null,
+                r.source === "byok" ? h("span", { class: "badge vimeo" }, "own key") : (r.topic === "book" ? h("span", { class: "badge " + (r.verified ? "drive" : "warn") }, r.verified ? "quotes ok" : "quotes?") : null),
+                [r.book || "general", r.mode, r.effort, new Date(r.created_at).toLocaleString()].filter(Boolean).join(" · "))),
+            h("div", { class: "acts" }, btn("Read", "sm", function () { read(r); }),
+              btn("✕", "bad sm ico", async function () { if (confirm("Delete this saved answer?")) { await db(sb.from("ai_logs").delete().eq("id", r.id)); toast("Deleted", "ok"); draw(); } }))));
+        });
+        if (shown.length > 120) listBox.appendChild(h("div", { class: "muted", style: "text-align:center;padding:.5rem" }, "Showing 120 of " + shown.length + ". Narrow the filters to see the rest."));
+      }
+      function read(r) {
+        var pre = function (t) { return h("div", { style: "white-space:pre-wrap;line-height:1.65;font-size:.92rem;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:.8rem 1rem" }, t); };
+        var m = bigModal("Saved answer", h("div", {}, h("div", { class: "group" }, "Question"), pre(r.question), h("div", { class: "group" }, "Answer"), pre(r.answer),
+          h("div", { class: "muted", style: "margin-top:.8rem" }, "Provider: " + (r.provider || "-") + " · quotes: " + r.quotes + " (" + r.quotes_bad + " not found in the book) · " + (r.cached ? "from saved copy" : "fresh answer")),
+          h("div", { class: "foot" }, btn("Close", "", function () { m.close(); }))));
+      }
+      term.addEventListener("input", function () { F.term = term.value; paint(); });
+      bsel.addEventListener("change", function () { F.book = bsel.value; paint(); });
+      body.appendChild(h("div", { class: "card" }, h("div", { style: "display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.7rem" }, KINDS.map(function (k) { return btn(k[1], "sm" + (F.kind === k[0] ? " pri" : ""), function () { F.kind = k[0]; draw(); }); })),
+        h("div", { style: "display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem" }, term, bsel), listBox));
+      paint();
+    }
+    draw();
+  }
+
+  /* ============================================================
      LOGIN + SHELL
      ============================================================ */
   var TABS = [["notes", "fa-book-open", "Notes", tabNotes], ["recordings", "fa-clapperboard", "Recordings", tabRecordings], ["assignments", "fa-file-pen", "Assignments", tabAssignments],
     ["songs", "fa-music", "Songs", tabSongs], ["notifications", "fa-bell", "Notices", tabNotifications], ["carousel", "fa-images", "Slideshow", tabCarousel],
-    ["memories", "fa-camera-retro", "Memories", tabMemories], ["settings", "fa-gear", "Settings", tabSettings], ["backup", "fa-floppy-disk", "Backup", tabBackup]];
-  var NO_REORDER = { settings: 1, backup: 1 };
+    ["memories", "fa-camera-retro", "Memories", tabMemories], ["aidata", "fa-robot", "AI Data", tabAiData], ["settings", "fa-gear", "Settings", tabSettings], ["backup", "fa-floppy-disk", "Backup", tabBackup]];
+  var NO_REORDER = { settings: 1, backup: 1, aidata: 1 };
   var app = document.getElementById("app");
   document.body.appendChild(h("div", { class: "busy-bar" }));
 
@@ -1008,6 +1081,6 @@
     if (s && s.user && s.user.email === EMAIL("superadmin")) start(); else { if (s) await sb.auth.signOut(); showLogin(); }
   }
 
-  window.AdminLib = { parseTime: parseTime, fmtTime: fmtTime, parseLyricsText: parseLyricsText, toLrc: toLrc, cleanWhatsapp: cleanWhatsapp, guessType: guessType, applyOrder: applyOrder, acadYear: acadYear, EMAIL: EMAIL };
+  window.AdminLib = { parseTime: parseTime, fmtTime: fmtTime, parseLyricsText: parseLyricsText, toLrc: toLrc, cleanWhatsapp: cleanWhatsapp, guessType: guessType, applyOrder: applyOrder, toJsonl: toJsonl, acadYear: acadYear, EMAIL: EMAIL };
   boot();
 })();
